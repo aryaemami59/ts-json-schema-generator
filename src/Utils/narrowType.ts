@@ -12,8 +12,7 @@ import { derefType } from "./derefType.js";
  * the type candidates match the predicate then undefined is returned.
  *
  * @param type      - The type to narrow down.
- * @param predicate - The predicate function to filter the type variants. If it returns true then the type variant is
- *                    kept, when returning false it is removed.
+ * @param predicate - The predicate function to filter the type variants. If it returns true then the type variant is kept, when returning false it is removed.
  * @return The narrowed down type.
  */
 export function narrowType(type: BaseType, predicate: (type: BaseType) => boolean): BaseType {

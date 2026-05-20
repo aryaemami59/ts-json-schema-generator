@@ -17,12 +17,12 @@ import { BooleanLiteralNodeParser } from "../src/NodeParser/BooleanLiteralNodePa
 import { BooleanTypeNodeParser } from "../src/NodeParser/BooleanTypeNodeParser.js";
 import { CallExpressionParser } from "../src/NodeParser/CallExpressionParser.js";
 import { ConditionalTypeNodeParser } from "../src/NodeParser/ConditionalTypeNodeParser.js";
-import { NewExpressionParser } from "../src/NodeParser/NewExpressionParser.js";
 import { ConstructorNodeParser } from "../src/NodeParser/ConstructorNodeParser.js";
 import { EnumNodeParser } from "../src/NodeParser/EnumNodeParser.js";
 import { ExpressionWithTypeArgumentsNodeParser } from "../src/NodeParser/ExpressionWithTypeArgumentsNodeParser.js";
 import { FunctionNodeParser } from "../src/NodeParser/FunctionNodeParser.js";
 import { HiddenNodeParser } from "../src/NodeParser/HiddenTypeNodeParser.js";
+import { IdentifierNodeParser } from "../src/NodeParser/IdentifierNodeParser.js";
 import { IndexedAccessTypeNodeParser } from "../src/NodeParser/IndexedAccessTypeNodeParser.js";
 import { InferTypeNodeParser } from "../src/NodeParser/InferTypeNodeParser.js";
 import { InterfaceAndClassNodeParser } from "../src/NodeParser/InterfaceAndClassNodeParser.js";
@@ -32,6 +32,7 @@ import { LiteralNodeParser } from "../src/NodeParser/LiteralNodeParser.js";
 import { MappedTypeNodeParser } from "../src/NodeParser/MappedTypeNodeParser.js";
 import { NamedTupleMemberNodeParser } from "../src/NodeParser/NamedTupleMemberNodeParser.js";
 import { NeverTypeNodeParser } from "../src/NodeParser/NeverTypeNodeParser.js";
+import { NewExpressionParser } from "../src/NodeParser/NewExpressionParser.js";
 import { NullLiteralNodeParser } from "../src/NodeParser/NullLiteralNodeParser.js";
 import { NumberLiteralNodeParser } from "../src/NodeParser/NumberLiteralNodeParser.js";
 import { NumberTypeNodeParser } from "../src/NodeParser/NumberTypeNodeParser.js";
@@ -41,8 +42,11 @@ import { OptionalTypeNodeParser } from "../src/NodeParser/OptionalTypeNodeParser
 import { ParameterParser } from "../src/NodeParser/ParameterParser.js";
 import { ParenthesizedNodeParser } from "../src/NodeParser/ParenthesizedNodeParser.js";
 import { PrefixUnaryExpressionNodeParser } from "../src/NodeParser/PrefixUnaryExpressionNodeParser.js";
+import { PromiseNodeParser } from "../src/NodeParser/PromiseNodeParser.js";
 import { PropertyAccessExpressionParser } from "../src/NodeParser/PropertyAccessExpressionParser.js";
 import { RestTypeNodeParser } from "../src/NodeParser/RestTypeNodeParser.js";
+import { SatisfiesNodeParser } from "../src/NodeParser/SatisfiesNodeParser.js";
+import { SpreadElementNodeParser } from "../src/NodeParser/SpreadElementNodeParser.js";
 import { StringLiteralNodeParser } from "../src/NodeParser/StringLiteralNodeParser.js";
 import { StringTemplateLiteralNodeParser } from "../src/NodeParser/StringTemplateLiteralNodeParser.js";
 import { StringTypeNodeParser } from "../src/NodeParser/StringTypeNodeParser.js";
@@ -59,14 +63,45 @@ import { UnknownTypeNodeParser } from "../src/NodeParser/UnknownTypeNodeParser.j
 import { VoidTypeNodeParser } from "../src/NodeParser/VoidTypeNodeParser.js";
 import type { SubNodeParser } from "../src/SubNodeParser.js";
 import { TopRefNodeParser } from "../src/TopRefNodeParser.js";
-import { SatisfiesNodeParser } from "../src/NodeParser/SatisfiesNodeParser.js";
-import { PromiseNodeParser } from "../src/NodeParser/PromiseNodeParser.js";
-import { SpreadElementNodeParser } from "../src/NodeParser/SpreadElementNodeParser.js";
-import { IdentifierNodeParser } from "../src/NodeParser/IdentifierNodeParser.js";
 import { castArray } from "../src/Utils/castArray.js";
 
+/**
+ * A callback invoked during {@linkcode createParser} that can append custom
+ * {@linkcode SubNodeParser} instances to the parser chain before it is
+ * finalized.
+ *
+ * @example
+ * <caption>Adding a custom parser via augmentor</caption>
+ *
+ * ```ts
+ * import { createParser } from 'ts-json-schema-generator';
+ *
+ * const parser = createParser(program, config, (chain) => {
+ *   chain.addNodeParser(new MyCustomParser());
+ * });
+ * ```
+ *
+ * @see {@linkcode createParser}
+ * @see {@linkcode MutableParser}
+ */
 export type ParserAugmentor = (parser: MutableParser) => void;
 
+/**
+ * Builds and returns a {@linkcode NodeParser} pipeline containing all built-in
+ * sub-parsers. An optional {@linkcode ParserAugmentor} callback can inject
+ * custom parsers before the built-in ones are registered.
+ *
+ * The returned parser wraps the chain in {@linkcode TopRefNodeParser} to
+ * handle the {@linkcode CompletedConfig.topRef | topRef} configuration option.
+ *
+ * @param program - The TypeScript program providing the type-checker.
+ * @param config - The completed generator configuration used to parameterize built-in parsers (e.g., `additionalProperties`, `jsDoc`, `functions`).
+ * @param augmentor - Optional callback to inject custom {@linkcode SubNodeParser} instances.
+ * @returns A {@linkcode NodeParser} backed by the full built-in chain.
+ *
+ * @see {@linkcode ParserAugmentor}
+ * @see {@linkcode createGenerator}
+ */
 export function createParser(program: ts.Program, config: CompletedConfig, augmentor?: ParserAugmentor): NodeParser {
     const typeChecker = program.getTypeChecker();
     const chainNodeParser = new ChainNodeParser(typeChecker, []);

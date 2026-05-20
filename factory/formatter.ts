@@ -32,11 +32,46 @@ import { UnionTypeFormatter } from "../src/TypeFormatter/UnionTypeFormatter.js";
 import { UnknownTypeFormatter } from "../src/TypeFormatter/UnknownTypeFormatter.js";
 import { VoidTypeFormatter } from "../src/TypeFormatter/VoidTypeFormatter.js";
 
+/**
+ * A callback invoked during {@linkcode createFormatter} that can append
+ * custom {@linkcode SubTypeFormatter} instances to the formatter chain
+ * before it is finalized.
+ *
+ * The second parameter, `circularReferenceTypeFormatter`, provides
+ * access to the {@linkcode CircularReferenceTypeFormatter} wrapper so
+ * recursive formatters can safely delegate back to it.
+ *
+ * @example
+ * <caption>Adding a custom formatter via augmentor</caption>
+ *
+ * ```ts
+ * import { createFormatter } from 'ts-json-schema-generator';
+ *
+ * const formatter = createFormatter(config, (chain, circular) => {
+ *   chain.addTypeFormatter(new MyCustomFormatter(circular));
+ * });
+ * ```
+ *
+ * @see {@linkcode createFormatter}
+ * @see {@linkcode MutableTypeFormatter}
+ */
 export type FormatterAugmentor = (
     formatter: MutableTypeFormatter,
     circularReferenceTypeFormatter: CircularReferenceTypeFormatter,
 ) => void;
 
+/**
+ * Builds and returns a {@linkcode TypeFormatter} pipeline containing all
+ * built-in sub-formatters. An optional {@linkcode FormatterAugmentor} callback
+ * can inject custom formatters before the built-in ones are registered.
+ *
+ * @param config - The completed generator configuration used to parameterize built-in formatters (e.g., `encodeRefs`, `discriminatorType`, `functions`).
+ * @param augmentor - Optional callback to inject custom {@linkcode SubTypeFormatter} instances.
+ * @returns A {@linkcode TypeFormatter} backed by a {@linkcode CircularReferenceTypeFormatter} wrapping the full chain.
+ *
+ * @see {@linkcode FormatterAugmentor}
+ * @see {@linkcode createGenerator}
+ */
 export function createFormatter(config: CompletedConfig, augmentor?: FormatterAugmentor): TypeFormatter {
     const chainTypeFormatter = new ChainTypeFormatter([]);
     const circularReferenceTypeFormatter = new CircularReferenceTypeFormatter(chainTypeFormatter);

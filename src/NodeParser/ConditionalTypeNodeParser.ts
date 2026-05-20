@@ -3,10 +3,10 @@ import type { NodeParser } from "../NodeParser.js";
 import { Context } from "../NodeParser.js";
 import type { SubNodeParser } from "../SubNodeParser.js";
 import type { BaseType } from "../Type/BaseType.js";
+import { NeverType } from "../Type/NeverType.js";
+import { UnionType } from "../Type/UnionType.js";
 import { isAssignableTo } from "../Utils/isAssignableTo.js";
 import { narrowType } from "../Utils/narrowType.js";
-import { UnionType } from "../Type/UnionType.js";
-import { NeverType } from "../Type/NeverType.js";
 
 class CheckType {
     constructor(
@@ -89,8 +89,7 @@ export class ConditionalTypeNodeParser implements SubNodeParser {
      * the check-type is a type parameter which is then narrowed down by the extends-type.
      *
      * @param node                   - The reference node for the new context.
-     * @param checkType              - An object containing the type parameter name of the check-type, and the narrowed
-     *                                 down check type to use for the type parameter in sub parsers.
+     * @param checkType              - An object containing the type parameter name of the check-type, and the narrowed down check type to use for the type parameter in sub parsers.
      * @param inferMap               - A map that links parameter names to their inferred types.
      * @return The created sub context.
      */

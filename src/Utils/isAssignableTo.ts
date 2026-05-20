@@ -1,27 +1,27 @@
 import { AnyType } from "../Type/AnyType.js";
 import { ArrayType } from "../Type/ArrayType.js";
 import type { BaseType } from "../Type/BaseType.js";
+import { BooleanType } from "../Type/BooleanType.js";
 import { EnumType } from "../Type/EnumType.js";
+import { FunctionType } from "../Type/FunctionType.js";
+import { InferType } from "../Type/InferType.js";
 import { IntersectionType } from "../Type/IntersectionType.js";
+import type { LiteralValue } from "../Type/LiteralType.js";
+import { LiteralType } from "../Type/LiteralType.js";
+import { NeverType } from "../Type/NeverType.js";
 import { NullType } from "../Type/NullType.js";
+import { NumberType } from "../Type/NumberType.js";
 import type { ObjectProperty } from "../Type/ObjectType.js";
 import { ObjectType } from "../Type/ObjectType.js";
 import { OptionalType } from "../Type/OptionalType.js";
+import { RestType } from "../Type/RestType.js";
+import { StringType } from "../Type/StringType.js";
 import { TupleType } from "../Type/TupleType.js";
 import { UndefinedType } from "../Type/UndefinedType.js";
 import { UnionType } from "../Type/UnionType.js";
 import { UnknownType } from "../Type/UnknownType.js";
 import { VoidType } from "../Type/VoidType.js";
 import { derefType } from "./derefType.js";
-import type { LiteralValue } from "../Type/LiteralType.js";
-import { LiteralType } from "../Type/LiteralType.js";
-import { StringType } from "../Type/StringType.js";
-import { NumberType } from "../Type/NumberType.js";
-import { BooleanType } from "../Type/BooleanType.js";
-import { InferType } from "../Type/InferType.js";
-import { RestType } from "../Type/RestType.js";
-import { NeverType } from "../Type/NeverType.js";
-import { FunctionType } from "../Type/FunctionType.js";
 
 /**
  * Returns the combined types from the given intersection. Currently only object types are combined. Maybe more
@@ -51,8 +51,7 @@ function combineIntersectingTypes(intersection: IntersectionType): BaseType[] {
 /**
  * Returns all object properties of the given type and all its base types.
  *
- * @param type - The type for which to return the properties. If type is not an object type or object has no properties
- *               Then an empty list ist returned.
+ * @param type - The type for which to return the properties. If type is not an object type or object has no properties then an empty list is returned.
  * @return All object properties of the type. Empty if none.
  */
 function getObjectProperties(type: BaseType): ObjectProperty[] {
@@ -143,7 +142,7 @@ export function isAssignableTo(
         return true;
     }
 
-    /** Don't check types when already inside them. This solves circular dependencies. */
+    // Don't check types when already inside them. This solves circular dependencies.
     if (insideTypes.has(source) || insideTypes.has(target)) {
         return true;
     }

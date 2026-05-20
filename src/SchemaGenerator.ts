@@ -1,20 +1,60 @@
 import ts from "typescript";
 import type { Config } from "./Config.js";
 import { MultipleDefinitionsError, RootlessError, UnhandledError } from "./Error/Errors.js";
-import { Context, type NodeParser } from "./NodeParser.js";
+import type { NodeParser } from "./NodeParser.js";
+import { Context } from "./NodeParser.js";
 import type { Definition } from "./Schema/Definition.js";
 import type { Schema } from "./Schema/Schema.js";
+import { AnnotatedType } from "./Type/AnnotatedType.js";
 import type { BaseType } from "./Type/BaseType.js";
 import { DefinitionType } from "./Type/DefinitionType.js";
 import type { TypeFormatter } from "./TypeFormatter.js";
-import type { StringMap } from "./Utils/StringMap.js";
-import { AnnotatedType } from "./Type/AnnotatedType.js";
+import { castArray } from "./Utils/castArray.js";
 import { hasJsDocTag } from "./Utils/hasJsDocTag.js";
 import { removeUnreachable } from "./Utils/removeUnreachable.js";
-import { castArray } from "./Utils/castArray.js";
+import type { StringMap } from "./Utils/StringMap.js";
 import { symbolAtNode } from "./Utils/symbolAtNode.js";
 
+/**
+ * Orchestrates schema generation by combining a TypeScript
+ * {@linkcode ts.Program}, a {@linkcode NodeParser} pipeline, and a
+ * {@linkcode TypeFormatter} pipeline into a single entry point.
+ *
+ * Use {@linkcode createGenerator} from the factory module to construct a fully
+ * configured instance rather than calling this constructor directly.
+ *
+ * @example
+ * <caption>Generate a schema for a named exported type</caption>
+ *
+ * ```ts
+ * import { createGenerator } from 'ts-json-schema-generator';
+ *
+ * const generator = createGenerator({ path: 'src/‎**‎/*.ts' });
+ * const schema = generator.createSchema('MyInterface');
+ * console.log(JSON.stringify(schema, null, 2));
+ * ```
+ *
+ * @example
+ * <caption>Generate schemas for all exported types at once</caption>
+ * ```ts
+ * import { createGenerator } from 'ts-json-schema-generator';
+ *
+ * const schema = createGenerator({
+ *   path: 'src/‎**‎/*.ts',
+ *   type: ['*'],
+ * }).createSchema();
+ * ```
+ *
+ * @see {@linkcode createGenerator}
+ * @see {@linkcode Config}
+ */
 export class SchemaGenerator {
+    /**
+     * @param program - A compiled TypeScript program providing source file and type-checker access.
+     * @param nodeParser - The parser pipeline that converts AST nodes to internal {@linkcode BaseType} representations.
+     * @param typeFormatter - The formatter pipeline that converts internal types to JSON Schema {@linkcode Definition} objects.
+     * @param config - Optional generator configuration. When omitted, {@linkcode DEFAULT_CONFIG} values are assumed to already be applied.
+     */
     public constructor(
         protected readonly program: ts.Program,
         protected readonly nodeParser: NodeParser,
@@ -22,11 +62,31 @@ export class SchemaGenerator {
         protected readonly config?: Config,
     ) {}
 
+    /**
+     * Generates a complete JSON Schema document for the given type
+     * name(s). Pass `'*'` (or omit) to include all exported types.
+     *
+     * @param fullNames - One or more fully-qualified type names to use as schema roots. Omit or pass `'*'` to generate for all exported types.
+     * @returns A {@linkcode Schema} object with a `$schema` property and a `definitions` map of reachable types.
+     * @throws An {@linkcode Error} if `'*'` is mixed with specific names.
+     * @throws A {@linkcode RootlessError} if a named type cannot be found.
+     * @throws An {@linkcode UnhandledError} if parsing or formatting fails unexpectedly.
+     */
     public createSchema(fullNames?: string | string[]): Schema {
         const rootNodes = this.getRootNodes(castArray(fullNames));
         return this.createSchemaFromNodes(rootNodes);
     }
 
+    /**
+     * Generates a JSON Schema document from pre-resolved TypeScript AST nodes.
+     * Useful when the caller already has node references and wants to bypass
+     * name resolution.
+     *
+     * @param rootNodes - TypeScript AST nodes to use as schema roots.
+     * @returns A {@linkcode Schema} object with a `$schema` property and a `definitions` map of reachable types.
+     * @throws An {@linkcode UnhandledError} if parsing or formatting fails unexpectedly.
+     * @throws A {@linkcode MultipleDefinitionsError} if two types share the same definition name.
+     */
     public createSchemaFromNodes(rootNodes: ts.Node[]): Schema {
         const roots = rootNodes.map((rootNode) => ({
             rootNode: rootNode,
@@ -62,6 +122,16 @@ export class SchemaGenerator {
         };
     }
 
+    /**
+     * Resolves TypeScript AST nodes for the requested type names. Passing
+     * `'*'` (or omitting) generates nodes for all exported types from the root
+     * source files.
+     *
+     * @param fullNames - The requested type names, or `undefined` / `['*']` to generate all.
+     * @returns An array of TypeScript nodes for the requested types.
+     * @throws An {@linkcode Error} if `'*'` is mixed with specific names.
+     * @throws A {@linkcode RootlessError} if a name cannot be found.
+     */
     protected getRootNodes(fullNames: string[] | undefined): ts.Node[] {
         // ["*"] means generate everything.
         if (fullNames && fullNames.includes("*") && fullNames.length > 1) {
@@ -82,6 +152,14 @@ export class SchemaGenerator {
         return [...rootNodes.values()];
     }
 
+    /**
+     * Locates the AST node for a single fully-qualified type name, searching
+     * project files first and then external files.
+     *
+     * @param fullName - The fully-qualified type name to find.
+     * @returns The TypeScript AST node for {@linkcode fullName}.
+     * @throws A {@linkcode RootlessError} if {@linkcode fullName} is not found.
+     */
     protected findNamedNode(fullName: string): ts.Node {
         const typeChecker = this.program.getTypeChecker();
         const allTypes = new Map<string, ts.Node>();
@@ -102,6 +180,15 @@ export class SchemaGenerator {
         throw new RootlessError(fullName);
     }
 
+    /**
+     * Converts the root {@linkcode BaseType} to a JSON Schema
+     * {@linkcode Definition} via the formatter pipeline.
+     *
+     * @param rootType - The internal type to convert.
+     * @param rootNode - The TypeScript node associated with the type, used for error reporting.
+     * @returns The root {@linkcode Definition} for {@linkcode rootType}.
+     * @throws An {@linkcode UnhandledError} on formatter failure.
+     */
     protected getRootTypeDefinition(rootType: BaseType, rootNode: ts.Node): Definition {
         try {
             return this.typeFormatter.getDefinition(rootType);
@@ -110,6 +197,15 @@ export class SchemaGenerator {
         }
     }
 
+    /**
+     * Collects all reachable {@linkcode DefinitionType} children of
+     * {@linkcode rootType} into {@linkcode childDefinitions}, deduplicating by
+     * name.
+     *
+     * @param rootType - The root type whose children to collect.
+     * @param childDefinitions - The map to populate with definitions.
+     * @throws A {@linkcode MultipleDefinitionsError} if two structurally distinct types share the same definition name.
+     */
     protected appendRootChildDefinitions(rootType: BaseType, childDefinitions: StringMap<Definition>): void {
         const seen = new Set<string>();
 
@@ -164,8 +260,23 @@ export class SchemaGenerator {
             return definitions;
         }, childDefinitions);
     }
+
+    /**
+     * Splits all source files in the program into project files and
+     * external files (those under `node_modules`).
+     *
+     * @returns `{ projectFiles, externalFiles }`.
+     */
     protected partitionFiles(): {
+        /**
+         * Source files that are part of the user's project
+         * (not under `node_modules`).
+         */
         projectFiles: ts.SourceFile[];
+
+        /**
+         * Source files that are external dependencies (under `node_modules`).
+         */
         externalFiles: ts.SourceFile[];
     } {
         const projectFiles = new Array<ts.SourceFile>();
@@ -179,6 +290,14 @@ export class SchemaGenerator {
         return { projectFiles, externalFiles };
     }
 
+    /**
+     * Walks each source file and populates `types` by calling
+     * {@linkcode SchemaGenerator.inspectNode | inspectNode()}.
+     *
+     * @param sourceFiles - The source files to inspect.
+     * @param typeChecker - The TypeScript type-checker.
+     * @param types - The map to populate with discovered types.
+     */
     protected appendTypes(
         sourceFiles: readonly ts.SourceFile[],
         typeChecker: ts.TypeChecker,
@@ -189,6 +308,14 @@ export class SchemaGenerator {
         }
     }
 
+    /**
+     * Recursively inspects a TypeScript AST node, adding named and exported
+     * type declarations to {@linkcode allTypes}.
+     *
+     * @param node - The node to inspect.
+     * @param typeChecker - The TypeScript type-checker.
+     * @param allTypes - The map to populate with discovered types.
+     */
     protected inspectNode(node: ts.Node, typeChecker: ts.TypeChecker, allTypes: Map<string, ts.Node>): void {
         if (ts.isVariableDeclaration(node)) {
             if (
@@ -305,6 +432,13 @@ export class SchemaGenerator {
         ts.forEachChild(node, (subnode) => this.inspectNode(subnode, typeChecker, allTypes));
     }
 
+    /**
+     * Returns `true` when the node is exported and not tagged `@internal`
+     * (when JSDoc parsing is enabled).
+     *
+     * @param node - The declaration node to test.
+     * @returns Whether the node should be treated as an exported type.
+     */
     protected isExportType(
         node: ts.InterfaceDeclaration | ts.ClassDeclaration | ts.EnumDeclaration | ts.TypeAliasDeclaration,
     ): boolean {
@@ -316,10 +450,25 @@ export class SchemaGenerator {
         return !!node.localSymbol?.exportSymbol;
     }
 
+    /**
+     * Returns `true` when the type alias declaration has type parameters
+     * (i.e. is a generic type).
+     *
+     * @param node - The type alias declaration to test.
+     * @returns `true` when the type alias declaration has type parameters (i.e. is a generic type).
+     */
     protected isGenericType(node: ts.TypeAliasDeclaration): boolean {
         return !!(node.typeParameters && node.typeParameters.length > 0);
     }
 
+    /**
+     * Returns the fully-qualified name of the node's symbol, with any module
+     * path prefix stripped.
+     *
+     * @param node - The declaration node to name.
+     * @param typeChecker - The TypeScript type-checker.
+     * @returns The fully-qualified name of the node's symbol, with any module path prefix stripped.
+     */
     protected getFullName(node: ts.Declaration, typeChecker: ts.TypeChecker): string {
         return typeChecker.getFullyQualifiedName(symbolAtNode(node)!).replace(/".*"\./, "");
     }
